@@ -1,0 +1,21 @@
+/home/strawberry/Downloads/clion-2017.2.3/bin/cmake/bin/cmake -DCMAKE_BUILD_TYPE=Debug -G "CodeBlocks - Unix Makefiles" /home/strawberry/Desktop/project/client
+CMake Warning at CMakeLists.txt:15 (find_package):
+  By not providing "FindGStreamer.cmake" in CMAKE_MODULE_PATH this project
+  has asked CMake to find a package configuration file provided by
+  "GStreamer", but CMake did not find one.
+
+  Could not find a package configuration file provided by "GStreamer" with
+  any of the following names:
+
+    GStreamerConfig.cmake
+    gstreamer-config.cmake
+
+  Add the installation prefix of "GStreamer" to CMAKE_PREFIX_PATH or set
+  "GStreamer_DIR" to a directory containing one of the above files.  If
+  "GStreamer" provides a separate development package or SDK, be sure it has
+  been installed.
+
+
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/strawberry/Desktop/project/client/cmake-build-debug

@@ -1,0 +1,28 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/strawberry/Desktop/project/client/main.c
+stdio.h
+-
+stdlib.h
+-
+sys/socket.h
+-
+netinet/in.h
+-
+unistd.h
+-
+string.h
+-
+arpa/inet.h
+-
+glib-2.0/glib.h
+-
+gstreamer-1.0/gst/gst.h
+-
+
