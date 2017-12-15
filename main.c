@@ -10,7 +10,6 @@
 #include <glib.h>
 #include <gst/gst.h> //To be able to use GStreamer1.0 library
 
-
 static GThread *gstreamer_thread;
 
 /* Tracer Methods and Variables*/
@@ -25,92 +24,125 @@ static void tracer_socket_onData(dyad_Event *e);
 static void tracer_socket_onClose(dyad_Event *e);
 static void tracer_socket_onConnect(dyad_Event *e);
 
-static char* tracer_server_address;
+static char *tracer_server_address;
 static int tracer_server_port;
-static char* tracer_car_id;
-static char* servoblaster_file_name;
-static char* steering_pin;
-static char* throttle_pin;
+static char *tracer_car_id;
+static char *servoblaster_file_name;
+static char *steering_pin;
+static char *throttle_pin;
+//Gstreamer Ports
+int video_port = NULL;
+int audio_port = NULL;
+
 static volatile gint running = 0;
 
 //Tracer Socket functions for car connection
 
-static void tracer_socket_onData(dyad_Event *e) {
-   char* message = g_malloc0(e->size);
+static void tracer_socket_onData(dyad_Event *e)
+{
+   char *message = g_malloc0(e->size);
    memcpy(message, e->data, e->size);
    printf("Got a message from LS: %s\n", message);
 
-
-   //Process Command
-   int direction, speed;
-   char directionstr[2] = "",speedstr[2] = "";
-
    //Process the command
    char command = message[0];
-   switch (command) {
-      case '0':
-         //direction
-         directionstr[0] = message[1];
-         directionstr[1] = message[2];
-         direction = atoi(directionstr);
-         printf("DIRECTION: %d\n", direction);
+   switch (command)
+   {
+   case '0':
+      //Process Control Command
+      char directionstr[2] = "", speedstr[2] = "";
 
-         //speed
-         speedstr[0] = message[3];
-         speedstr[1] = message[4];
-         speed = atoi(speedstr);
-         printf("SPEED: %d\n", speed);
+      //direction
+      directionstr[0] = message[1];
+      directionstr[1] = message[2];
+      targetRawSteeringValue = atoi(directionstr);
+      printf("STEERING: %d\n", targetRawSteeringValue);
 
-         //Set target values
-         targetRawSteeringValue = direction;
-         targetRawThrottleValue = speed;
-         break;
-      case '1':
-         //exit (shut down)
-         printf("Local Server wanted to EXIT");
-         g_atomic_int_set(&running, 0);
-         break;
-      case '2':
-         //start streaming
-         printf("Local Server wanted to START streaming\n");
-         start_gstreamer_streaming();
-         break;
-      case '3':
-         //stop streaming
-         printf("Local Server wanted to STOP streaming\n");
-         stop_gstreamer_streaming();
-         break;
+      //speed
+      speedstr[0] = message[3];
+      speedstr[1] = message[4];
+      targetRawThrottleValue = atoi(speedstr);
+      printf("THROTTLE: %d\n", targetRawThrottleValue);
+
+      break;
+   case '1':
+      //exit (shut down)
+      printf("Local Server wanted me to EXIT");
+      g_atomic_int_set(&running, 0);
+      break;
+   case '2':
+      //start streaming
+      printf("Local Server wanted to me START streaming\n");
+      start_gstreamer_streaming();
+      break;
+   case '3':
+      //stop streaming
+      printf("Local Server wanted to me STOP streaming\n");
+      stop_gstreamer_streaming();
+      break;
+   case '4':
+      //initialize Gstreamer
+      printf("Local Server gave me port numbers for streaming.\n");
+      //format: "48000\n9000\n", video_port = 8000, audio_port = 9000
+
+      char port_as_string[20];
+      int last_pos = 1;
+      for (int c = 1; c < strlen(message); c++)
+      {
+         if (message[c] == '\n')
+         {
+            if (video_port == NULL)
+            {
+               port_as_string[c] = "\0";
+               video_port = atoi(port_as_string);
+               printf("video port: %d\n", video_port);
+               port_as_string[0] = "\0";
+               last_pos = c + 1;
+            }
+            else
+            {
+               port_as_string[c - last_pos] = "\0";
+               audio_port = atoi(port_as_string);
+               printf("audio port: %d\n", audio_port);
+            }
+         }
+         port_as_string[c - last_pos] = message[c];
+      }
+      //Now we can init Gstreamer with the given port numbers.
+      gstreamer_init_pipeline();
+      break;
    }
 }
 
-
-static void tracer_socket_onClose(dyad_Event *e) {
-    printf("Disconnected from Local Server!!!\n");
-    //TODO: Try to reconnect!
+static void tracer_socket_onClose(dyad_Event *e)
+{
+   printf("Disconnected from Local Server!!!\n");
+   //TODO: Try to reconnect!
 }
 
-static void tracer_socket_onConnect(dyad_Event *e) {
+static void tracer_socket_onConnect(dyad_Event *e)
+{
    //First thing, send your ID
    dyad_writef(e->remote, tracer_car_id);
    printf("Connected to Local Server!\n");
 }
 
-
 FILE *servoBlasterFile; //ServoBlaster
-FILE *IP; //file description
+FILE *IP;               //file description
 
-void error(char *msg){
-   perror (msg);
+void error(char *msg)
+{
+   perror(msg);
    exit(1);
 }
-const double servoStepPerSec = 30;
-const double steeringMax = 12;
-const double throttleMax = 9;
-const double throttleMin = 9;
-const double steeringStepValue = 1.8;
-const double throttleStepValue = 0.1;
-const double idleSteeringValue = 49;
-const double idleThrottleValue = 50;
+double servoStepPerSec = 30;
+double steeringMax = 12;
+double throttleMax = 9;
+double throttleMin = 9;
+double steeringStepValue = 1.8;
+double throttleStepValue = 0.1;
+double idleSteeringValue = 49;
+double idleThrottleValue = 50;
 static double currentSteeringValue = 50;
 static double currentThrottleValue = 50;
 static double targetSteeringValue = 50;
@@ -120,8 +152,8 @@ static double targetRawThrottleValue = 50; //These need to be normalized with ma
 
 static gboolean steeringIsStopped = TRUE;
 
-void *tracer_servo_control_thread(void *data) {
-
+void *tracer_servo_control_thread(void *data)
+{
 
    currentSteeringValue = idleSteeringValue;
    currentThrottleValue = idleThrottleValue;
@@ -131,7 +163,8 @@ void *tracer_servo_control_thread(void *data) {
    const int stepSleepInterval = G_USEC_PER_SEC / servoStepPerSec;
    gboolean steeringChanged = 1;
    gboolean throttleChanged = 1;
-   while (g_atomic_int_get(&running)) {
+   while (g_atomic_int_get(&running))
+   {
       steeringChanged = 1;
       throttleChanged = 1;
 
@@ -142,25 +175,24 @@ void *tracer_servo_control_thread(void *data) {
 
       if (targetThrottleValue > currentThrottleValue)
       {
-         currentThrottleValue += currentThrottleValue < idleThrottleValue && targetThrottleValue > idleThrottleValue ? throttleStepValue * 5 :
-                                 targetThrottleValue == idleThrottleValue ? throttleStepValue * 3 : throttleStepValue * throttleStepPercentage;
+         currentThrottleValue += currentThrottleValue < idleThrottleValue && targetThrottleValue > idleThrottleValue ? throttleStepValue * 5 : targetThrottleValue == idleThrottleValue ? throttleStepValue * 3 : throttleStepValue * throttleStepPercentage;
          //currentThrottleValue += currentThrottleValue < idleThrottleValue ? throttleStepValue * 4 : throttleStepValue;
          if (targetThrottleValue < currentThrottleValue)
-               currentThrottleValue = targetThrottleValue;
-         if (targetThrottleValue > idleThrottleValue && currentThrottleValue > idleThrottleValue  && currentThrottleValue < idleThrottleValue + throttleMin)
-               currentThrottleValue = idleThrottleValue + throttleMin;
+            currentThrottleValue = targetThrottleValue;
+         if (targetThrottleValue > idleThrottleValue && currentThrottleValue > idleThrottleValue && currentThrottleValue < idleThrottleValue + throttleMin)
+            currentThrottleValue = idleThrottleValue + throttleMin;
       }
       else if (targetThrottleValue < currentThrottleValue)
       {
-         currentThrottleValue -= currentThrottleValue > idleThrottleValue && targetThrottleValue < idleThrottleValue ? throttleStepValue * 5 :
-                                 targetThrottleValue == idleThrottleValue ? throttleStepValue * 3 : throttleStepValue * throttleStepPercentage;
+         currentThrottleValue -= currentThrottleValue > idleThrottleValue && targetThrottleValue < idleThrottleValue ? throttleStepValue * 5 : targetThrottleValue == idleThrottleValue ? throttleStepValue * 3 : throttleStepValue * throttleStepPercentage;
          //currentThrottleValue -= currentThrottleValue > idleThrottleValue ? throttleStepValue * 4 : throttleStepValue;
          if (targetThrottleValue > currentThrottleValue)
-               currentThrottleValue = targetThrottleValue;
-         if (targetThrottleValue < idleThrottleValue && currentThrottleValue < idleThrottleValue  && currentThrottleValue > idleThrottleValue - throttleMin)
-               currentThrottleValue = idleThrottleValue - throttleMin;
+            currentThrottleValue = targetThrottleValue;
+         if (targetThrottleValue < idleThrottleValue && currentThrottleValue < idleThrottleValue && currentThrottleValue > idleThrottleValue - throttleMin)
+            currentThrottleValue = idleThrottleValue - throttleMin;
       }
-      else {
+      else
+      {
          throttleChanged = 0;
       }
 
@@ -179,29 +211,28 @@ void *tracer_servo_control_thread(void *data) {
          currentSteeringValue += currentSteeringValue < idleSteeringValue && targetSteeringValue > idleSteeringValue ? steeringStepValue * 3 * steeringStepPercentage : steeringStepValue * steeringStepPercentage;
          //currentSteeringValue += steeringStepValue * steeringStepPercentage;
          if (targetSteeringValue < currentSteeringValue)
-               currentSteeringValue = targetSteeringValue;
+            currentSteeringValue = targetSteeringValue;
       }
       else if (targetSteeringValue < currentSteeringValue)
       {
          currentSteeringValue -= currentSteeringValue > idleSteeringValue && targetSteeringValue < idleSteeringValue ? steeringStepValue * 3 * steeringStepPercentage : steeringStepValue * steeringStepPercentage;
          //currentSteeringValue -= steeringStepValue * steeringStepPercentage;
          if (targetSteeringValue > currentSteeringValue)
-               currentSteeringValue = targetSteeringValue;
+            currentSteeringValue = targetSteeringValue;
       }
-      else {
+      else
+      {
          if (!steeringIsStopped)
          {
-               steeringIsStopped = TRUE;
-               stopSteering();
+            steeringIsStopped = TRUE;
+            stopSteering();
          }
          steeringChanged = 0;
       }
 
-
       if (throttleChanged)
       {
          char throtlecommand[100];
-
          sprintf(throtlecommand, "%s=%f%%\n", throttle_pin, currentThrottleValue);
          sendCommandToPWM(throtlecommand);
       }
@@ -212,38 +243,36 @@ void *tracer_servo_control_thread(void *data) {
       {
          steeringIsStopped = FALSE;
          char steeringCommand[100];
-
          sprintf(steeringCommand, "%s=%f%%\n", steering_pin, currentSteeringValue);
          sendCommandToPWM(steeringCommand);
       }
 
       g_usleep(stepSleepInterval);
    }
-
-
 }
 
-
-
-void stopTheCar() {
+void stopTheCar()
+{
    stopSteering();
    stopThrottling();
 }
 
-void stopSteering() {
+void stopSteering()
+{
    sendCommandToPWM("%s=0\n", steering_pin);
 }
 
-void stopThrottling() {
+void stopThrottling()
+{
    sendCommandToPWM("%s=0\n", throttle_pin);
 }
 
-void sendCommandToPWM(char* command) {
+void sendCommandToPWM(char *command)
+{
    fprintf(servoBlasterFile, command);
    fflush(servoBlasterFile);
    //usleep(1000); //5 ms
 }
-
 
 //Video elements
 GstElement *pipeline;
@@ -261,7 +290,8 @@ GstElement *opusenc;
 GstElement *rtpopuspay;
 GstElement *sinkAudio;
 
-void* gstreamer_init_pipeline_x264enc() {
+void *gstreamer_init_pipeline_x264enc()
+{
    //gst - launch - 1.0
    //rpicamsrc
    //! video / x - raw, width = 640, height = 480
@@ -276,7 +306,6 @@ void* gstreamer_init_pipeline_x264enc() {
    //! opusenc bandwidth = 1101 bitrate = 32000
    //! rtpopuspay
    //! udpsink host = 127.0.0.1 port = 8002 sync = true
-
 
    /* Initialize GStreamer */
    gst_init(NULL, NULL);
@@ -301,15 +330,15 @@ void* gstreamer_init_pipeline_x264enc() {
    sinkAudio = gst_element_factory_make("udpsink", "sinkAudio");
 
    if (!pipeline || !sourceVideo || !encoder || !h264parse || !rtppay || !sinkVideo || !sourceAudio || !audioconvert ||
-      !audioresample || !opusenc || !rtpopuspay || !sinkAudio) {
-      //  JANUS_LOG(LOG_ERR, "GStreamer; Unable to create GStreamer elements!\n");
+       !audioresample || !opusenc || !rtpopuspay || !sinkAudio)
+   {
+      printf("GStreamer; Unable to create GStreamer elements!\n");
       return -1;
    }
 
    /* Build the pipeline. */
    gst_bin_add_many(GST_BIN(pipeline), sourceVideo, encoder, h264parse, rtppay, sinkVideo, sourceAudio, audioconvert,
-                  audioresample, opusenc, rtpopuspay, sinkAudio, NULL);
-
+                    audioresample, opusenc, rtpopuspay, sinkAudio, NULL);
 
    gboolean link_ok;
    GstCaps *caps;
@@ -322,53 +351,60 @@ void* gstreamer_init_pipeline_x264enc() {
    link_ok = gst_element_link_filtered(sourceVideo, encoder, caps);
    gst_caps_unref(caps);
 
-   if (!link_ok) {
-      // JANUS_LOG(LOG_ERR, "GStreamer; Failed to link sourceVideo and encoder!\n");
+   if (!link_ok)
+   {
+      printf("GStreamer; Failed to link sourceVideo and encoder!\n");
    }
 
-   if (!gst_element_link(encoder, h264parse)) {
+   if (!gst_element_link(encoder, h264parse))
+   {
       g_printerr("Elements could not be linked. encoder, h264parse\n");
       gst_object_unref(pipeline);
       return -1;
    }
-   if (!gst_element_link(h264parse, rtppay)) {
+   if (!gst_element_link(h264parse, rtppay))
+   {
       g_printerr("Elements could not be linked. h264parse, rtppay\n");
       gst_object_unref(pipeline);
       return -1;
    }
-   if (!gst_element_link(rtppay, sinkVideo)) {
+   if (!gst_element_link(rtppay, sinkVideo))
+   {
       g_printerr("Elements could not be linked. rtppay, sinkVideo\n");
       gst_object_unref(pipeline);
       return -1;
    }
 
-
-   if (!gst_element_link(sourceAudio, audioconvert)) {
+   if (!gst_element_link(sourceAudio, audioconvert))
+   {
       g_printerr("Elements could not be linked. sourceAudio, audioconvert\n");
       gst_object_unref(pipeline);
       return -1;
    }
-   if (!gst_element_link(audioconvert, audioresample)) {
+   if (!gst_element_link(audioconvert, audioresample))
+   {
       g_printerr("Elements could not be linked. audioconvert, audioresample\n");
       gst_object_unref(pipeline);
       return -1;
    }
-   if (!gst_element_link(audioresample, opusenc)) {
+   if (!gst_element_link(audioresample, opusenc))
+   {
       g_printerr("Elements could not be linked. audioresample, opusenc\n");
       gst_object_unref(pipeline);
       return -1;
    }
-   if (!gst_element_link(opusenc, rtpopuspay)) {
+   if (!gst_element_link(opusenc, rtpopuspay))
+   {
       g_printerr("Elements could not be linked. opusenc, rtpopuspay\n");
       gst_object_unref(pipeline);
       return -1;
    }
-   if (!gst_element_link(rtpopuspay, sinkAudio)) {
+   if (!gst_element_link(rtpopuspay, sinkAudio))
+   {
       g_printerr("Elements could not be linked. rtpopuspay, sinkAudio\n");
       gst_object_unref(pipeline);
       return -1;
    }
-
 
    /* Set element properties */
 
@@ -384,29 +420,27 @@ void* gstreamer_init_pipeline_x264enc() {
    g_object_set(encoder, "threads", 1, NULL);
    g_object_set(rtppay, "config-interval", 1, NULL);
    g_object_set(sinkVideo, "host", "127.0.0.1", NULL);
-   g_object_set(sinkVideo, "port", 8004, NULL);
+   g_object_set(sinkVideo, "port", video_port, NULL);
    g_object_set(sinkVideo, "sync", 1, NULL);
    //g_object_set(sinkVideo, "async", 0, NULL);
-
 
    //Audio elements
    g_object_set(sourceAudio, "device", "hw:1,0", NULL);
    g_object_set(opusenc, "bandwidth", 1101, NULL);
    g_object_set(opusenc, "bitrate", 48000, NULL);
    g_object_set(sinkAudio, "host", "127.0.0.1", NULL);
-   g_object_set(sinkAudio, "port", 8002, NULL);
+   g_object_set(sinkAudio, "port", audio_port, NULL);
    g_object_set(sinkAudio, "sync", 1, NULL);
-
 }
 
-void* gstreamer_init_pipeline_omxh264enc() {
+void *gstreamer_init_pipeline_omxh264enc()
+{
 
    //gst - launch - 1.0
    //rpicamsrc !video / x - raw, width = 640, height = 480
    //! omxh264enc !video / x - h264, width = 640, height = 480, framerate = 30 / 1, profile = baseline
    //! rtph264pay config - interval = 1
    //! udpsink host = 127.0.0.1 port = 8004 sync = false async = false
-
 
    //gst - launch - 1.0
    //rpicamsrc
@@ -421,8 +455,6 @@ void* gstreamer_init_pipeline_omxh264enc() {
    //! rtpopuspay
    //! udpsink host = 127.0.0.1 port = 8002 sync = true
 
-
-
    /* Initialize GStreamer */
    gst_init(NULL, NULL);
 
@@ -435,8 +467,9 @@ void* gstreamer_init_pipeline_omxh264enc() {
    rtppay = gst_element_factory_make("rtph264pay", "rtph264pay");
    sinkVideo = gst_element_factory_make("udpsink", "udpsink");
 
-   if (!pipeline || !sourceVideo || !encoder || !rtppay || !sinkVideo) {
-//      JANUS_LOG(LOG_ERR, "GStreamer; Unable to create GStreamer elements!\n");
+   if (!pipeline || !sourceVideo || !encoder || !rtppay || !sinkVideo)
+   {
+      printf("GStreamer; Unable to create GStreamer elements!\n");
       return;
    }
 
@@ -459,31 +492,27 @@ void* gstreamer_init_pipeline_omxh264enc() {
    link_ok = gst_element_link_filtered(sourceVideo, encoder, caps);
    gst_caps_unref(caps);
 
-   if (!link_ok) {
-//      JANUS_LOG(LOG_ERR, "GStreamer; Failed to link sourceVideo and encoder!\n");
+   if (!link_ok)
+   {
+      printf("GStreamer; Failed to link sourceVideo and encoder!\n");
    }
 
-
-
-   if (!gst_element_link(encoder, rtppay)) {
+   if (!gst_element_link(encoder, rtppay))
+   {
       g_printerr("Elements could not be linked. encoder, rtppay\n");
       gst_object_unref(pipeline);
       return -1;
    }
-   if (!gst_element_link(rtppay, sinkVideo)) {
+   if (!gst_element_link(rtppay, sinkVideo))
+   {
       g_printerr("Elements could not be linked. rtppay, sinkVideo\n");
       gst_object_unref(pipeline);
       return -1;
    }
 
-
    //rpicamsrc inline-headers=true ! video/x-raw,width=640,height=480 ! x264enc speed-preset=ultrafast byte-stream=true bitrate=50 threads=1 ! rtph264pay ! udpsink host=127.0.0.1 port=8004 sync=false async=false
 
    /* Set element properties */
-
-
-
-
 
    //g_object_set(sourceVideo, "awb-mode", 6, NULL);
    //g_object_set(sourceVideo, "caps", "video/x-raw,width=640,height=480", NULL);
@@ -500,111 +529,170 @@ void* gstreamer_init_pipeline_omxh264enc() {
    g_object_set(sinkVideo, "port", 8004, NULL);
    //g_object_set(sinkVideo, "sync", 0, NULL);
    //g_object_set(sinkVideo, "async", 0, NULL);
-
 }
 
-void *gstreamer_init_pipeline() {
+void *gstreamer_init_pipeline()
+{
 
    gstreamer_init_pipeline_x264enc();
    gst_init(NULL, NULL);
    gst_element_set_state(pipeline, GST_STATE_READY);
-
 }
 
-void start_gstreamer_streaming() {
+void start_gstreamer_streaming()
+{
    /* Start playing */
 
-   GstStateChangeReturn  ret = gst_element_set_state(pipeline, GST_STATE_PLAYING);
-   if (ret == GST_STATE_CHANGE_FAILURE) {
+   GstStateChangeReturn ret = gst_element_set_state(pipeline, GST_STATE_PLAYING);
+   if (ret == GST_STATE_CHANGE_FAILURE)
+   {
       printf("GStreamer; Unable to set the pipeline to the playing state.\n");
       gst_object_unref(pipeline);
       //TODO: Let server know
    }
 }
 
-void stop_gstreamer_streaming() {
-   GstStateChangeReturn  ret =  gst_element_set_state(pipeline, GST_STATE_PAUSED);
-   if (ret == GST_STATE_CHANGE_FAILURE) {
+void stop_gstreamer_streaming()
+{
+   GstStateChangeReturn ret = gst_element_set_state(pipeline, GST_STATE_PAUSED);
+   if (ret == GST_STATE_CHANGE_FAILURE)
+   {
       printf("GStreamer; Unable to set the pipeline to the playing state.\n");
       gst_object_unref(pipeline);
       //TODO: Let server know
    }
 }
 
-int main() {
+int main()
+{
 
    char *config_file = "./tracer.cfg";
-   if((config = janus_config_parse(config_file)) == NULL) {
+   if ((config = janus_config_parse(config_file)) == NULL)
+   {
       g_print("Error reading/parsing the configuration file, going on with the defaults and the command line arguments\n");
       exit(1);
    }
 
    janus_config_item *serverIpItem = janus_config_get_item_drilldown(config, "server", "server_ip");
-   if(serverIpItem && serverIpItem->value) {
+   if (serverIpItem && serverIpItem->value)
+   {
       tracer_server_address = serverIpItem->value;
    }
    janus_config_item *serverPortItem = janus_config_get_item_drilldown(config, "server", "server_port");
-   if(serverPortItem && serverPortItem->value) {
+   if (serverPortItem && serverPortItem->value)
+   {
       tracer_server_port = atoi(serverPortItem->value);
    }
 
    janus_config_item *tracerCarIdItem = janus_config_get_item_drilldown(config, "car", "id");
-   if(tracerCarIdItem && tracerCarIdItem->value) {
+   if (tracerCarIdItem && tracerCarIdItem->value)
+   {
       tracer_car_id = tracerCarIdItem->value;
    }
 
-
    janus_config_item *servoblasterFileItem = janus_config_get_item_drilldown(config, "gpio", "servoblaster_file");
-   if(servoblasterFileItem && servoblasterFileItem->value) {
+   if (servoblasterFileItem && servoblasterFileItem->value)
+   {
       servoblaster_file_name = servoblasterFileItem->value;
    }
 
    janus_config_item *steeringPinItem = janus_config_get_item_drilldown(config, "gpio", "steering_pin");
-   if(steeringPinItem && steeringPinItem->value) {
+   if (steeringPinItem && steeringPinItem->value)
+   {
       steering_pin = steeringPinItem->value;
    }
 
    janus_config_item *throttlePinItem = janus_config_get_item_drilldown(config, "gpio", "throttle_pin");
-   if(throttlePinItem && throttlePinItem->value) {
+   if (throttlePinItem && throttlePinItem->value)
+   {
       throttle_pin = throttlePinItem->value;
    }
 
+   janus_config_item *servoStepItem = janus_config_get_item_drilldown(config, "server", "servo_step_per_second");
+   if (servoStepItem && servoStepItem->value)
+   {
+      servoStepPerSec = atoi(servoStepItem->value);
+   }
+
+   janus_config_item *steeringMaxItem = janus_config_get_item_drilldown(config, "server", "max_steering");
+   if (steeringMaxItem && steeringMaxItem->value)
+   {
+      steeringMax = atoi(steeringMaxItem->value);
+   }
+
+   janus_config_item *throttleMaxItem = janus_config_get_item_drilldown(config, "server", "max_throttle");
+   if (throttleMaxItem && throttleMaxItem->value)
+   {
+      throttleMax = atoi(throttleMaxItem->value);
+   }
+
+   janus_config_item *throttleMinItem = janus_config_get_item_drilldown(config, "server", "min_throttle");
+   if (throttleMinItem && throttleMinItem->value)
+   {
+      throttleMin = atoi(throttleMinItem->value);
+   }
+
+   janus_config_item *steeringStepItem = janus_config_get_item_drilldown(config, "server", "steering_step_value");
+   if (steeringStepItem && steeringStepItem->value)
+   {
+      steeringStepValue = atoi(steeringStepItem->value);
+   }
+
+   janus_config_item *throttleStepItem = janus_config_get_item_drilldown(config, "server", "throttle_step_value");
+   if (steeringStepItem && throttleStepItem->value)
+   {
+      throttleStepValue = atoi(throttleStepItem->value);
+   }
+
+   janus_config_item *idleSteeringItem = janus_config_get_item_drilldown(config, "server", "idle_steering_value");
+   if (idleSteeringItem && idleSteeringItem->value)
+   {
+      idleSteeringValue = atoi(idleSteeringItem->value);
+   }
+
+   janus_config_item *idleThrottleItem = janus_config_get_item_drilldown(config, "server", "idle_throttle_value");
+   if (idleThrottleItem && idleThrottleItem->value)
+   {
+      idleThrottleValue = atoi(idleThrottleItem->value);
+   }
 
    g_atomic_int_set(&running, 1);
 
-   gstreamer_init_pipeline();
+   //We do this after getting port number from the LS.
+   //gstreamer_init_pipeline();
 
    /* Tracer GPIO Library Setup */
    servoBlasterFile = fopen(servoblaster_file_name, "w");
    sleep(5);
 
-   if (servoBlasterFile == NULL) {
+   if (servoBlasterFile == NULL)
+   {
       error("Error opening servoblaster ");
       exit(0);
    }
 
-
    /* Start the servo_control_thread */
    servo_control_thread = g_thread_try_new("Servo control thread", &tracer_servo_control_thread, NULL, &error);
-   if (!servo_control_thread) {
+   if (!servo_control_thread)
+   {
       g_atomic_int_set(&running, 0);
       //TODO: Let server know
       return -1;
    }
 
-
    dyad_init();
 
    dyad_Stream *s = dyad_newStream();
    dyad_addListener(s, DYAD_EVENT_CONNECT, tracer_socket_onConnect, NULL);
-   dyad_addListener(s, DYAD_EVENT_DATA,    tracer_socket_onData,    NULL);
-   dyad_addListener(s, DYAD_EVENT_CLOSE,    tracer_socket_onClose,    NULL);
+   dyad_addListener(s, DYAD_EVENT_DATA, tracer_socket_onData, NULL);
+   dyad_addListener(s, DYAD_EVENT_CLOSE, tracer_socket_onClose, NULL);
    dyad_connect(s, tracer_server_address, tracer_server_port);
 
-   while (g_atomic_int_get(&initialized) && !g_atomic_int_get(&stopping)) {
+   while (g_atomic_int_get(&initialized) && !g_atomic_int_get(&stopping))
+   {
       dyad_update();
    }
-   
+
    printf("Socket Client thread ended\n");
    dyad_shutdown();
 
