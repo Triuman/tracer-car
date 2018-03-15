@@ -36,6 +36,27 @@ int audio_port = NULL;
 
 static volatile gint running = 0;
 
+/* Position Stuff */
+
+void float2Bytes(byte* bytes_temp[4],float float_variable){ 
+  union {
+    float a;
+    unsigned char bytes[4];
+  } thing;
+  thing.a = float_variable;
+  memcpy(bytes_temp, thing.bytes, 4);
+}
+
+static void tracer_on_distance_change(char* node_name, float distance)
+{
+
+
+}
+
+
+/* Position Stuff End*/
+
+
 //Tracer Socket functions for car connection
 
 static void tracer_socket_onData(dyad_Event *e)
@@ -677,6 +698,7 @@ int main()
    {
       g_atomic_int_set(&running, 0);
       //TODO: Let server know
+      printf("Servo control thread coulnd't be started.\n");
       return -1;
    }
 
