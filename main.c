@@ -28,6 +28,7 @@ static char *tracer_car_id;
 static char *servoblaster_file_name;
 static char *steering_pin;
 static char *throttle_pin;
+static char *camera_servo_pin;
 
 static volatile gint running = 0;
 
@@ -85,6 +86,16 @@ static void tracer_socket_onData(dyad_Event *e)
       //exit (shut down)
       printf("Local Server wanted me to EXIT");
       g_atomic_int_set(&running, 0);
+      break;
+   case '2':
+      //Player moved his head. Move the servo accordingly.
+      printf("Turn the Camera");
+      char directionstr[2] = "";
+      //direction
+      directionstr[0] = message[1];
+      directionstr[1] = message[2];
+      double targetServoValue = atoi(directionstr);
+      sendCommandToPWM("%s=%f%%\n", steering_pin, targetServoValue);
       break;
    
    }
@@ -293,6 +304,12 @@ int main()
    if (throttlePinItem && throttlePinItem->value)
    {
       throttle_pin = throttlePinItem->value;
+   }
+
+   janus_config_item *cameraServoPinItem = janus_config_get_item_drilldown(config, "gpio", "camera_servo_pin");
+   if (cameraServoPinItem && cameraServoPinItem->value)
+   {
+      camera_servo_pin = cameraServoPinItem->value;
    }
 
    janus_config_item *servoStepItem = janus_config_get_item_drilldown(config, "gpio", "servo_step_per_second");
