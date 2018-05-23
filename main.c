@@ -16,6 +16,7 @@ static GThread *servo_control_thread;
 void stopTheCar();
 void stopSteering();
 void stopThrottling();
+void sendCommandToPWM(char *command);
 
 /* Dyad Socket Stuff */
 static void tracer_socket_onData(dyad_Event *e);
@@ -31,26 +32,43 @@ static char *throttle_pin;
 static char *camera_servo_pin;
 
 static volatile gint running = 0;
-
-/* Position Stuff */
-
-void float2Bytes(byte* bytes_temp[4],float float_variable){ 
-  union {
-    float a;
-    unsigned char bytes[4];
-  } thing;
-  thing.a = float_variable;
-  memcpy(bytes_temp, thing.bytes, 4);
-}
-
-static void tracer_on_distance_change(char* node_name, float distance)
-{
+static gint initialized = 1, stopping = 0;
 
 
-}
+double servoStepPerSec = 30;
+double steeringMax = 12;
+double throttleMax = 9;
+double throttleMin = 9;
+double steeringStepValue = 1.8;
+double throttleStepValue = 0.1;
+double idleSteeringValue = 49;
+double idleThrottleValue = 50;
+static double currentSteeringValue = 50;
+static double currentThrottleValue = 50;
+static double targetSteeringValue = 50;
+static double targetThrottleValue = 50;
+static double targetRawSteeringValue = 50; //These need to be normalized with max value
+static double targetRawThrottleValue = 50; //These need to be normalized with max value
+
+// /* Position Stuff */
+
+// void float2Bytes(byte* bytes_temp[4],float float_variable){ 
+//   union {
+//     float a;
+//     unsigned char bytes[4];
+//   } thing;
+//   thing.a = float_variable;
+//   memcpy(bytes_temp, thing.bytes, 4);
+// }
+
+// static void tracer_on_distance_change(char* node_name, float distance)
+// {
 
 
-/* Position Stuff End*/
+// }
+
+
+// /* Position Stuff End*/
 
 
 //Tracer Socket functions for car connection
@@ -63,11 +81,12 @@ static void tracer_socket_onData(dyad_Event *e)
 
    //Process the command
    char command = message[0];
+    char directionstr[2] = "";
+    char speedstr[2] = "";
    switch (command)
    {
    case '0':
       //Process Control Command
-      char directionstr[2] = "", speedstr[2] = "";
 
       //direction
       directionstr[0] = message[1];
@@ -86,6 +105,7 @@ static void tracer_socket_onData(dyad_Event *e)
       //exit (shut down)
       printf("Local Server wanted me to EXIT");
       g_atomic_int_set(&running, 0);
+      g_atomic_int_set(&stopping, 1);
       break;
    case '2':
       //Player moved his head. Move the servo accordingly.
@@ -95,7 +115,9 @@ static void tracer_socket_onData(dyad_Event *e)
       directionstr[0] = message[1];
       directionstr[1] = message[2];
       double targetServoValue = atoi(directionstr);
-      sendCommandToPWM("%s=%f%%\n", steering_pin, targetServoValue);
+      char cameraCommand[100];
+      sprintf(cameraCommand, "%s=%f%%\n", camera_servo_pin, targetServoValue);
+      sendCommandToPWM(cameraCommand);
       break;
    
    }
@@ -110,8 +132,9 @@ static void tracer_socket_onClose(dyad_Event *e)
 static void tracer_socket_onConnect(dyad_Event *e)
 {
    //First thing, send your ID
-   dyad_writef(e->remote, tracer_car_id);
    printf("Connected to Local Server!\n");
+   printf("Car id -> %s\n", tracer_car_id);
+   dyad_writef(e->stream, tracer_car_id);
 }
 
 FILE *servoBlasterFile; //ServoBlaster
@@ -122,20 +145,6 @@ void error(char *msg)
    perror(msg);
    exit(1);
 }
-double servoStepPerSec = 30;
-double steeringMax = 12;
-double throttleMax = 9;
-double throttleMin = 9;
-double steeringStepValue = 1.8;
-double throttleStepValue = 0.1;
-double idleSteeringValue = 49;
-double idleThrottleValue = 50;
-static double currentSteeringValue = 50;
-static double currentThrottleValue = 50;
-static double targetSteeringValue = 50;
-static double targetThrottleValue = 50;
-static double targetRawSteeringValue = 50; //These need to be normalized with max value
-static double targetRawThrottleValue = 50; //These need to be normalized with max value
 
 static gboolean steeringIsStopped = TRUE;
 
@@ -246,12 +255,16 @@ void stopTheCar()
 
 void stopSteering()
 {
-   sendCommandToPWM("%s=0\n", steering_pin);
+  char steeringCommand[100];
+  sprintf(steeringCommand, "%s=0\n", steering_pin);
+  sendCommandToPWM(steeringCommand);
 }
 
 void stopThrottling()
 {
-   sendCommandToPWM("%s=0\n", throttle_pin);
+    char throtlecommand[100];
+    sprintf(throtlecommand, "%s=0\n", throttle_pin);
+   sendCommandToPWM(throtlecommand);
 }
 
 void sendCommandToPWM(char *command)
@@ -265,11 +278,7 @@ int main()
 {
 
    char *config_file = "./tracer.cfg";
-   if ((config = janus_config_parse(config_file)) == NULL)
-   {
-      g_print("Error reading/parsing the configuration file, going on with the defaults and the command line arguments\n");
-      exit(1);
-   }
+  janus_config *config = janus_config_parse(config_file);
 
    janus_config_item *serverIpItem = janus_config_get_item_drilldown(config, "server", "server_ip");
    if (serverIpItem && serverIpItem->value)
@@ -364,7 +373,7 @@ int main()
 
    /* Tracer GPIO Library Setup */
    servoBlasterFile = fopen(servoblaster_file_name, "w");
-   sleep(5);
+   g_usleep(1000);
 
    if (servoBlasterFile == NULL)
    {

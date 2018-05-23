@@ -13,11 +13,109 @@
 #include <string.h>
 #include <ctype.h>
 #include <errno.h>
+#include <stdint.h>
 
 #include "config.h"
-#include "debug.h"
-#include "utils.h"
 
+
+/* Easy way to replace multiple occurrences of a string with another */
+char *janus_string_replace(char *message, const char *old_string, const char *new_string)
+{
+	if(!message || !old_string || !new_string)
+		return NULL;
+
+	if(!strstr(message, old_string)) {	/* Nothing to be done (old_string is not there) */
+		return message;
+	}
+	if(!strcmp(old_string, new_string)) {	/* Nothing to be done (old_string=new_string) */
+		return message;
+	}
+	if(strlen(old_string) == strlen(new_string)) {	/* Just overwrite */
+		char *outgoing = message;
+		char *pos = strstr(outgoing, old_string), *tmp = NULL;
+		int i = 0;
+		while(pos) {
+			i++;
+			memcpy(pos, new_string, strlen(new_string));
+			pos += strlen(old_string);
+			tmp = strstr(pos, old_string);
+			pos = tmp;
+		}
+		return outgoing;
+	} else {	/* We need to resize */
+		char *outgoing = g_strdup(message);
+		g_free(message);
+		if(outgoing == NULL) {
+			return NULL;
+		}
+		int diff = strlen(new_string) - strlen(old_string);
+		/* Count occurrences */
+		int counter = 0;
+		char *pos = strstr(outgoing, old_string), *tmp = NULL;
+		while(pos) {
+			counter++;
+			pos += strlen(old_string);
+			tmp = strstr(pos, old_string);
+			pos = tmp;
+		}
+		uint16_t old_stringlen = strlen(outgoing)+1, new_stringlen = old_stringlen + diff*counter;
+		if(diff > 0) {	/* Resize now */
+			tmp = g_realloc(outgoing, new_stringlen);
+			outgoing = tmp;
+		}
+		/* Replace string */
+		pos = strstr(outgoing, old_string);
+		while(pos) {
+			if(diff > 0) {	/* Move to the right (new_string is larger than old_string) */
+				uint16_t len = strlen(pos)+1;
+				memmove(pos + diff, pos, len);
+				memcpy(pos, new_string, strlen(new_string));
+				pos += strlen(new_string);
+				tmp = strstr(pos, old_string);
+			} else {	/* Move to the left (new_string is smaller than old_string) */
+				uint16_t len = strlen(pos - diff)+1;
+				memmove(pos, pos - diff, len);
+				memcpy(pos, new_string, strlen(new_string));
+				pos += strlen(old_string);
+				tmp = strstr(pos, old_string);
+			}
+			pos = tmp;
+		}
+		if(diff < 0) {	/* We skipped the resize previously (shrinking memory) */
+			tmp = g_realloc(outgoing, new_stringlen);
+			outgoing = tmp;
+		}
+		outgoing[strlen(outgoing)] = '\0';
+		return outgoing;
+	}
+}
+
+int janus_mkdir(const char *dir, mode_t mode) {
+	char tmp[256];
+	char *p = NULL;
+	size_t len;
+
+	int res = 0;
+	g_snprintf(tmp, sizeof(tmp), "%s", dir);
+	len = strlen(tmp);
+	if(tmp[len - 1] == '/')
+		tmp[len - 1] = 0;
+	for(p = tmp + 1; *p; p++) {
+		if(*p == '/') {
+			*p = 0;
+			res = mkdir(tmp, mode);
+			if(res != 0 && errno != EEXIST) {
+				//JANUS_LOG(LOG_ERR, "Error creating folder %s\n", tmp);
+				return res;
+			}
+			*p = '/';
+		}
+	}
+	res = mkdir(tmp, mode);
+	if(res != 0 && errno != EEXIST)
+		return res;
+	return 0;
+}
 
 /* Filename helper */
 static char *get_filename(const char *path) {
@@ -82,13 +180,13 @@ janus_config *janus_config_parse(const char *config_file) {
 		return NULL;
 	char *filename = get_filename(config_file);
 	if(filename == NULL) {
-		JANUS_LOG(LOG_ERR, "Invalid filename %s\n", config_file);
+		//JANUS_LOG(LOG_ERR, "Invalid filename %s\n", config_file);
 		return NULL;
 	}
 	/* Open file */
 	FILE *file = fopen(config_file, "rt");
 	if(!file) {
-		JANUS_LOG(LOG_ERR, "  -- Error reading configuration file '%s'... error %d (%s)\n", filename, errno, strerror(errno));
+		//JANUS_LOG(LOG_ERR, "  -- Error reading configuration file '%s'... error %d (%s)\n", filename, errno, strerror(errno));
 		return NULL;
 	}
 	/* Create configuration instance */
@@ -127,52 +225,52 @@ janus_config *janus_config_parse(const char *config_file) {
 			line++;
 			char *end = strchr(line, ']');
 			if(end == NULL) {
-				JANUS_LOG(LOG_ERR, "Error parsing category at line %d: syntax error (%s)\n", line_number, filename);
+				//JANUS_LOG(LOG_ERR, "Error parsing category at line %d: syntax error (%s)\n", line_number, filename);
 				goto error;
 			}
 			*end = '\0';
 			line = trim(line);
 			if(strlen(line) == 0) {
-				JANUS_LOG(LOG_ERR, "Error parsing category at line %d: no name (%s)\n", line_number, filename);
+				//JANUS_LOG(LOG_ERR, "Error parsing category at line %d: no name (%s)\n", line_number, filename);
 				goto error;
 			}
 			cg = janus_config_add_category(jc, line);
 			if(cg == NULL) {
-				JANUS_LOG(LOG_ERR, "Error adding category %s (%s)\n", line, filename);
+				//JANUS_LOG(LOG_ERR, "Error adding category %s (%s)\n", line, filename);
 				goto error;
 			}
 		} else {
 			/* Item */
 			char *name = line, *value = strchr(line, '=');
 			if(value == NULL || value == line) {
-				JANUS_LOG(LOG_ERR, "Error parsing item at line %d (%s)\n", line_number, filename);
+				//JANUS_LOG(LOG_ERR, "Error parsing item at line %d (%s)\n", line_number, filename);
 				goto error;
 			}
 			*value = '\0';
 			name = trim(name);
 			if(strlen(name) == 0) {
-				JANUS_LOG(LOG_ERR, "Error parsing item at line %d: no name (%s)\n", line_number, filename);
+				//JANUS_LOG(LOG_ERR, "Error parsing item at line %d: no name (%s)\n", line_number, filename);
 				goto error;
 			}
 			value++;
 			value = trim(value);
 			if(strlen(value) == 0) {
-				JANUS_LOG(LOG_ERR, "Error parsing item at line %d: no value (%s)\n", line_number, filename);
+				//JANUS_LOG(LOG_ERR, "Error parsing item at line %d: no value (%s)\n", line_number, filename);
 				goto error;
 			}
 			if(*value == '>') {
 				value++;
 				value = trim(value);
 				if(strlen(value) == 0) {
-					JANUS_LOG(LOG_ERR, "Error parsing item at line %d: no value (%s)\n", line_number, filename);
+					//JANUS_LOG(LOG_ERR, "Error parsing item at line %d: no value (%s)\n", line_number, filename);
 					goto error;
 				}
 			}
 			if(janus_config_add_item(jc, cg ? cg->name : NULL, name, value) == NULL) {
-				if(cg == NULL)
-					JANUS_LOG(LOG_ERR, "Error adding item %s (%s)\n", name, filename);
-				else
-					JANUS_LOG(LOG_ERR, "Error adding item %s to category %s (%s)\n", name, cg->name, filename);
+				//if(cg == NULL)
+					//JANUS_LOG(LOG_ERR, "Error adding item %s (%s)\n", name, filename);
+				//else
+					//JANUS_LOG(LOG_ERR, "Error adding item %s to category %s (%s)\n", name, cg->name, filename);
 				goto error;
 			}
 		}
@@ -189,7 +287,7 @@ error:
 janus_config *janus_config_create(const char *name) {
 	janus_config *jc = g_malloc0(sizeof(janus_config));
 	if(jc == NULL) {
-		JANUS_LOG(LOG_FATAL, "Memory error!\n");
+		//JANUS_LOG(LOG_FATAL, "Memory error!\n");
 		return NULL;
 	}
 	if(name != NULL) {
@@ -259,7 +357,7 @@ janus_config_category *janus_config_add_category(janus_config *config, const cha
 	}
 	c = g_malloc0(sizeof(janus_config_category));
 	if(c == NULL) {
-		JANUS_LOG(LOG_FATAL, "Memory error!\n");
+		//JANUS_LOG(LOG_FATAL, "Memory error!\n");
 		return NULL;
 	}
 	c->name = g_strdup(category);
@@ -286,7 +384,7 @@ janus_config_item *janus_config_add_item(janus_config *config, const char *categ
 	janus_config_category *c = category ? janus_config_add_category(config, category) : NULL;
 	if(category != NULL && c == NULL) {
 		/* Create it */
-		JANUS_LOG(LOG_FATAL, "Category error!\n");
+		//JANUS_LOG(LOG_FATAL, "Category error!\n");
 		return NULL;
 	}
 	janus_config_item *item = c ? janus_config_get_item(c, name) : NULL;
@@ -294,7 +392,7 @@ janus_config_item *janus_config_add_item(janus_config *config, const char *categ
 		/* Create it */
 		item = g_malloc0(sizeof(janus_config_item));
 		if(item == NULL) {
-			JANUS_LOG(LOG_FATAL, "Memory error!\n");
+			//JANUS_LOG(LOG_FATAL, "Memory error!\n");
 			return NULL;
 		}
 		item->name = g_strdup(name);
@@ -333,12 +431,12 @@ int janus_config_remove_item(janus_config *config, const char *category, const c
 void janus_config_print(janus_config *config) {
 	if(config == NULL)
 		return;
-	JANUS_LOG(LOG_VERB, "[%s]\n", config->name ? config->name : "??");
+	//JANUS_LOG(LOG_VERB, "[%s]\n", config->name ? config->name : "??");
 	if(config->items) {
 		GList *l = config->items;
 		while(l) {
 			janus_config_item *i = (janus_config_item *)l->data;
-			JANUS_LOG(LOG_VERB, "        %s: %s\n", i->name ? i->name : "??", i->value ? i->value : "??");
+			//JANUS_LOG(LOG_VERB, "        %s: %s\n", i->name ? i->name : "??", i->value ? i->value : "??");
 			l = l->next;
 		}
 	}
@@ -346,12 +444,12 @@ void janus_config_print(janus_config *config) {
 		GList *l = config->categories;
 		while(l) {
 			janus_config_category *c = (janus_config_category *)l->data;
-			JANUS_LOG(LOG_VERB, "    [%s]\n", c->name ? c->name : "??");
+			//JANUS_LOG(LOG_VERB, "    [%s]\n", c->name ? c->name : "??");
 			if(c->items) {
 				GList *li = c->items;
 				while(li) {
 					janus_config_item *i = (janus_config_item *)li->data;
-					JANUS_LOG(LOG_VERB, "        %s: %s\n", i->name ? i->name : "??", i->value ? i->value : "??");
+					//JANUS_LOG(LOG_VERB, "        %s: %s\n", i->name ? i->name : "??", i->value ? i->value : "??");
 					li = li->next;
 				}
 			}
@@ -368,7 +466,7 @@ gboolean janus_config_save(janus_config *config, const char *folder, const char 
 	if(folder != NULL) {
 		/* Create folder, if needed */
 		if(janus_mkdir(folder, 0755) < 0) {
-			JANUS_LOG(LOG_ERR, "Couldn't save configuration file, error creating folder '%s'...\n", folder);
+			//JANUS_LOG(LOG_ERR, "Couldn't save configuration file, error creating folder '%s'...\n", folder);
 			return -2;
 		}
 		g_snprintf(path, 1024, "%s/%s.cfg", folder, filename);
@@ -377,7 +475,7 @@ gboolean janus_config_save(janus_config *config, const char *folder, const char 
 	}
 	file = fopen(path, "wt");
 	if(file == NULL) {
-		JANUS_LOG(LOG_ERR, "Couldn't save configuration file, error opening file '%s'...\n", path);
+		//JANUS_LOG(LOG_ERR, "Couldn't save configuration file, error opening file '%s'...\n", path);
 		return -3;
 	}
 	/* Print a header */
