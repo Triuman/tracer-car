@@ -107,14 +107,14 @@ static void tracer_socket_onData(dyad_Event *e)
    case '2':
       //Player moved his head. Move the servo accordingly.
       printf("Turn the Camera\n");
-      char directionstr[2] = "";
-      //direction
-      directionstr[0] = message[1];
-      directionstr[1] = message[2];
-      double targetServoValue = atoi(directionstr);
-      char cameraCommand[100];
-      sprintf(cameraCommand, "%s=%f%%\n", camera_servo_pin, targetServoValue);
-      sendCommandToPWM(cameraCommand);
+      // char directionstr[2] = "";
+      // //direction
+      // directionstr[0] = message[1];
+      // directionstr[1] = message[2];
+      // double targetServoValue = atoi(directionstr);
+      // char cameraCommand[100];
+      // sprintf(cameraCommand, "%s=%f%%\n", camera_servo_pin, targetServoValue);
+      // sendCommandToPWM(cameraCommand);
       break;
    case '0':
       //exit (shut down)
@@ -402,24 +402,24 @@ int main()
    g_atomic_int_set(&running, 1);
 
    /* Tracer GPIO Library Setup */
-   servoBlasterFile = fopen(servoblaster_file_name, "w");
-   g_usleep(1000);
+//    servoBlasterFile = fopen(servoblaster_file_name, "w");
+//    g_usleep(1000);
 
-   if (servoBlasterFile == NULL)
-   {
-      error("Error opening servoblaster ");
-      exit(0);
-   }
+//    if (servoBlasterFile == NULL)
+//    {
+//       error("Error opening servoblaster ");
+//       exit(0);
+//    }
 
-   /* Start the servo_control_thread */
-   servo_control_thread = g_thread_try_new("Servo control thread", &tracer_servo_control_thread, NULL, &error);
-   if (!servo_control_thread)
-   {
-      g_atomic_int_set(&running, 0);
-      //TODO: Let server know
-      printf("Servo control thread coulnd't be started.\n");
-      return -1;
-   }
+//    /* Start the servo_control_thread */
+//    servo_control_thread = g_thread_try_new("Servo control thread", &tracer_servo_control_thread, NULL, &error);
+//    if (!servo_control_thread)
+//    {
+//       g_atomic_int_set(&running, 0);
+//       //TODO: Let server know
+//       printf("Servo control thread coulnd't be started.\n");
+//       return -1;
+//    }
 
    dyad_init();
 
@@ -434,7 +434,7 @@ int main()
    dyad_shutdown();
 
    /* Tracer Close ServoBlaster file */
-   fclose(servoBlasterFile);
+//    fclose(servoBlasterFile);
 
    return 0;
 }
