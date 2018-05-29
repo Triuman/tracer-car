@@ -130,6 +130,7 @@ static void tracer_socket_onData(dyad_Event *e)
 static void createNewSocketStream()
 {
    s = dyad_newStream();
+      dyad_setNoDelay(s, 1);
    dyad_addListener(s, DYAD_EVENT_CONNECT, tracer_socket_onConnect, NULL);
    dyad_addListener(s, DYAD_EVENT_DATA, tracer_socket_onData, NULL);
    dyad_addListener(s, DYAD_EVENT_CLOSE, tracer_socket_onClose, NULL);
