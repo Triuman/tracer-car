@@ -19,9 +19,12 @@ void stopThrottling();
 void sendCommandToPWM(char *command);
 
 /* Dyad Socket Stuff */
+static dyad_Stream *s;
+static void createNewSocketStream();
 static void tracer_socket_onData(dyad_Event *e);
 static void tracer_socket_onClose(dyad_Event *e);
 static void tracer_socket_onConnect(dyad_Event *e);
+static void tracer_socket_onDestroy(dyad_Event *e);
 
 static char *tracer_server_address;
 static int tracer_server_port;
@@ -77,7 +80,7 @@ static void tracer_socket_onData(dyad_Event *e)
 {
    char *message = g_malloc0(e->size);
    memcpy(message, e->data, e->size);
-   printf("Got a message from LS: %s\n", message);
+   printf("Got a message from Local Server: %c%c%c\n", message[0], message[1], message[2]);
 
    //Process the command
    char command = message[0];
@@ -85,7 +88,7 @@ static void tracer_socket_onData(dyad_Event *e)
     char speedstr[2] = "";
    switch (command)
    {
-   case '0':
+   case '1':
       //Process Control Command
 
       //direction
@@ -101,15 +104,9 @@ static void tracer_socket_onData(dyad_Event *e)
       printf("THROTTLE: %d\n", targetRawThrottleValue);
 
       break;
-   case '1':
-      //exit (shut down)
-      printf("Local Server wanted me to EXIT");
-      g_atomic_int_set(&running, 0);
-      g_atomic_int_set(&stopping, 1);
-      break;
    case '2':
       //Player moved his head. Move the servo accordingly.
-      printf("Turn the Camera");
+      printf("Turn the Camera\n");
       char directionstr[2] = "";
       //direction
       directionstr[0] = message[1];
@@ -119,21 +116,47 @@ static void tracer_socket_onData(dyad_Event *e)
       sprintf(cameraCommand, "%s=%f%%\n", camera_servo_pin, targetServoValue);
       sendCommandToPWM(cameraCommand);
       break;
+   case '0':
+      //exit (shut down)
+      printf("Local Server wanted me to EXIT\n");
+      g_atomic_int_set(&running, 0);
+      g_atomic_int_set(&stopping, 1);
+      break;
    
    }
 }
 
+
+static void createNewSocketStream()
+{
+   s = dyad_newStream();
+   dyad_addListener(s, DYAD_EVENT_CONNECT, tracer_socket_onConnect, NULL);
+   dyad_addListener(s, DYAD_EVENT_DATA, tracer_socket_onData, NULL);
+   dyad_addListener(s, DYAD_EVENT_CLOSE, tracer_socket_onClose, NULL);
+   dyad_addListener(s, DYAD_EVENT_DESTROY, tracer_socket_onDestroy, NULL);
+   dyad_connect(s, tracer_server_address, tracer_server_port);
+   printf("Trying to connect to Local Server!\n");
+}
+
 static void tracer_socket_onClose(dyad_Event *e)
 {
-   printf("Disconnected from Local Server!!!\n");
-   //TODO: Try to reconnect!
+   printf("Disconnected from Local Server!\n");
+   stopTheCar();
+   stopCameraServo();
+}
+
+static void tracer_socket_onDestroy(dyad_Event *e)
+{
+   printf("Socket Stream Destroyed!\n");
+   //Try to reconnect!
+  createNewSocketStream();
 }
 
 static void tracer_socket_onConnect(dyad_Event *e)
 {
    //First thing, send your ID
    printf("Connected to Local Server!\n");
-   printf("Car id -> %s\n", tracer_car_id);
+   printf("Car id sent -> %s\n", tracer_car_id);
    dyad_writef(e->stream, tracer_car_id);
 }
 
@@ -228,7 +251,7 @@ void *tracer_servo_control_thread(void *data)
 
       if (throttleChanged)
       {
-         char throtlecommand[100];
+         char throtlecommand[20];
          sprintf(throtlecommand, "%s=%f%%\n", throttle_pin, currentThrottleValue);
          sendCommandToPWM(throtlecommand);
       }
@@ -238,7 +261,7 @@ void *tracer_servo_control_thread(void *data)
       if (steeringChanged)
       {
          steeringIsStopped = FALSE;
-         char steeringCommand[100];
+         char steeringCommand[20];
          sprintf(steeringCommand, "%s=%f%%\n", steering_pin, currentSteeringValue);
          sendCommandToPWM(steeringCommand);
       }
@@ -255,16 +278,23 @@ void stopTheCar()
 
 void stopSteering()
 {
-  char steeringCommand[100];
+  char steeringCommand[20];
   sprintf(steeringCommand, "%s=0\n", steering_pin);
   sendCommandToPWM(steeringCommand);
 }
 
 void stopThrottling()
 {
-    char throtlecommand[100];
+    char throtlecommand[20];
     sprintf(throtlecommand, "%s=0\n", throttle_pin);
    sendCommandToPWM(throtlecommand);
+}
+
+void stopCameraServo()
+{
+      char cameracommand[20];
+      sprintf(cameracommand, "%s=0\n", camera_servo_pin);
+      sendCommandToPWM(cameracommand);
 }
 
 void sendCommandToPWM(char *command)
@@ -393,11 +423,7 @@ int main()
 
    dyad_init();
 
-   dyad_Stream *s = dyad_newStream();
-   dyad_addListener(s, DYAD_EVENT_CONNECT, tracer_socket_onConnect, NULL);
-   dyad_addListener(s, DYAD_EVENT_DATA, tracer_socket_onData, NULL);
-   dyad_addListener(s, DYAD_EVENT_CLOSE, tracer_socket_onClose, NULL);
-   dyad_connect(s, tracer_server_address, tracer_server_port);
+  createNewSocketStream();
 
    while (g_atomic_int_get(&initialized) && !g_atomic_int_get(&stopping))
    {
