@@ -115,6 +115,8 @@ static void tracer_socket_onData(dyad_Event *e)
       char cameraCommand[100];
       sprintf(cameraCommand, "%s=%f%%\n", camera_servo_pin, targetServoValue);
       sendCommandToPWM(cameraCommand);
+      //We need to send this command back to driver so he will rotate his view accordingly.
+      dyad_writef(e->stream, message);
       break;
    case '0':
       //exit (shut down)
