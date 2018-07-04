@@ -50,8 +50,8 @@ static double currentSteeringValue = 50;
 static double currentThrottleValue = 50;
 static double targetSteeringValue = 50;
 static double targetThrottleValue = 50;
-static double targetRawSteeringValue = 50; //These need to be normalized with max value
-static double targetRawThrottleValue = 50; //These need to be normalized with max value
+static int targetRawSteeringValue = 50; //These need to be normalized with max value
+static int targetRawThrottleValue = 50; //These need to be normalized with max value
 
 // /* Position Stuff */
 
