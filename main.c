@@ -80,7 +80,7 @@ static void tracer_socket_onData(dyad_Event *e)
 {
    char *message = g_malloc0(e->size);
    memcpy(message, e->data, e->size);
-   printf("Got a message from Local Server: %c%c%c\n", message[0], message[1], message[2]);
+   printf("Got a message from Local Server: %c%c%c%c%c\n", message[0], message[1], message[2], message[3], message[4]);
 
    //Process the command
    char command = message[0];
@@ -94,12 +94,14 @@ static void tracer_socket_onData(dyad_Event *e)
       //direction
       directionstr[0] = message[1];
       directionstr[1] = message[2];
+      printf("STEERING str: %s\n", directionstr);
       targetRawSteeringValue = atoi(directionstr);
       printf("STEERING: %d\n", targetRawSteeringValue);
 
       //speed
       speedstr[0] = message[3];
       speedstr[1] = message[4];
+      printf("THROTTLE str: %s\n", speedstr);
       targetRawThrottleValue = atoi(speedstr);
       printf("THROTTLE: %d\n", targetRawThrottleValue);
 
