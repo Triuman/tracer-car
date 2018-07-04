@@ -96,14 +96,14 @@ static void tracer_socket_onData(dyad_Event *e)
       memcpy(directionstr, &message[1], 2);
       directionstr[2] = '\0';
       printf("STEERING str: %s\n", directionstr);
-      targetRawSteeringValue = atoi(directionstr);
+      sscanf(directionstr, "%d", &targetRawSteeringValue);
       printf("STEERING: %d\n", targetRawSteeringValue);
 
       //speed
       memcpy(speedstr, &message[3], 2);
       speedstr[2] = '\0';
       printf("THROTTLE str: %s\n", speedstr);
-      targetRawThrottleValue = atoi(speedstr);
+      sscanf(speedstr, "%d", &targetRawThrottleValue);
       printf("THROTTLE: %d\n", targetRawThrottleValue);
 
       break;
