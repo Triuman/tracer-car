@@ -193,10 +193,10 @@ void *tracer_servo_control_thread(void *data)
       steeringChanged = 1;
       throttleChanged = 1;
 
-      double throttleStepPercentage = (-abs(currentThrottleValue - idleThrottleValue) + throttleMax) / (throttleMax + throttleMax / 10);
+      double throttleStepPercentage = (double)(-abs(currentThrottleValue - idleThrottleValue) + throttleMax) / (double)(throttleMax + throttleMax / 10);
 
       //normalize the coming percentage according to its max value
-      targetThrottleValue = (targetRawThrottleValue - 50) / 50 * throttleMax + idleThrottleValue;
+      targetThrottleValue = ((double)targetRawThrottleValue - 50.0) / 50.0 * (double)throttleMax + idleThrottleValue;
 
       if (targetThrottleValue > currentThrottleValue)
       {
@@ -221,15 +221,15 @@ void *tracer_servo_control_thread(void *data)
          throttleChanged = 0;
       }
 
-      double steeringStepPercentage = (-abs(currentThrottleValue - idleThrottleValue) + throttleMax + throttleMax) / (throttleMax + throttleMax);
+      double steeringStepPercentage = (double)(-abs(currentThrottleValue - idleThrottleValue) + throttleMax + throttleMax) / (double)(throttleMax + throttleMax);
 
       //normalize the coming percentage according to its max value
-      targetSteeringValue = (targetRawSteeringValue - 50) / 50 * steeringMax + idleSteeringValue;
+      targetSteeringValue = ((double)targetRawSteeringValue - 50.0) / 50.0 * (double)steeringMax + idleSteeringValue;
 
-      printf("targetRawSteeringValue value: %f\n", targetRawSteeringValue);
-      printf("target steering value: %f\n", targetSteeringValue);
-      printf("steeringMax value: %f\n", steeringMax);
-      printf("idleSteeringValue value: %f\n", idleSteeringValue);
+      // printf("targetRawSteeringValue value: %f\n", targetRawSteeringValue);
+      // printf("target steering value: %f\n", targetSteeringValue);
+      // printf("steeringMax value: %f\n", steeringMax);
+      // printf("idleSteeringValue value: %f\n", idleSteeringValue);
 
       if (targetSteeringValue > currentSteeringValue)
       {
