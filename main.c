@@ -103,6 +103,9 @@ static void tracer_socket_onData(dyad_Event *e)
       memcpy(speedstr, &message[3], 2);
       speedstr[2] = '\0';
       printf("THROTTLE str: %s\n", speedstr);
+      int asd;
+      sscanf(speedstr, "%d", &asd);
+      printf("asd: %d\n", asd);
       sscanf(speedstr, "%d", &targetRawThrottleValue);
       printf("THROTTLE: %d\n", targetRawThrottleValue);
 
