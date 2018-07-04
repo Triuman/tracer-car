@@ -84,24 +84,23 @@ static void tracer_socket_onData(dyad_Event *e)
 
    //Process the command
    char command = message[0];
-    char directionstr[3] = "";
-    char speedstr[3] = "";
    switch (command)
    {
    case '1':
       //Process Control Command
 
+      printf("Control Command\n");
+      char directionstr[3] = "";
+      char speedstr[3] = "";
       //direction
-      directionstr[0] = message[1];
-      directionstr[1] = message[2];
+      memcpy(directionstr, &message[1], 2);
       directionstr[2] = '\0';
       printf("STEERING str: %s\n", directionstr);
       targetRawSteeringValue = atoi(directionstr);
       printf("STEERING: %d\n", targetRawSteeringValue);
 
       //speed
-      speedstr[0] = message[3];
-      speedstr[1] = message[4];
+      memcpy(speedstr, &message[3], 2);
       speedstr[2] = '\0';
       printf("THROTTLE str: %s\n", speedstr);
       targetRawThrottleValue = atoi(speedstr);
