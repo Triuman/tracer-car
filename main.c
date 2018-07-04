@@ -39,13 +39,13 @@ static gint initialized = 1, stopping = 0;
 
 
 double servoStepPerSec = 30;
-double steeringMax = 12;
-double throttleMax = 9;
-double throttleMin = 9;
+int steeringMax = 12;
+int throttleMax = 9;
+int throttleMin = 9;
 double steeringStepValue = 1.8;
 double throttleStepValue = 0.1;
-double idleSteeringValue = 49;
-double idleThrottleValue = 50;
+int idleSteeringValue = 49;
+int idleThrottleValue = 50;
 static double currentSteeringValue = 50;
 static double currentThrottleValue = 50;
 static double targetSteeringValue = 50;
@@ -103,9 +103,6 @@ static void tracer_socket_onData(dyad_Event *e)
       memcpy(speedstr, &message[3], 2);
       speedstr[2] = '\0';
       printf("THROTTLE str: %s\n", speedstr);
-      int asd;
-      sscanf(speedstr, "%d", &asd);
-      printf("asd: %d\n", asd);7
       sscanf(speedstr, "%d", &targetRawThrottleValue);
       printf("THROTTLE: %d\n", targetRawThrottleValue);
 
@@ -229,10 +226,10 @@ void *tracer_servo_control_thread(void *data)
       //normalize the coming percentage according to its max value
       targetSteeringValue = (targetRawSteeringValue - 50) / 50 * steeringMax + idleSteeringValue;
 
-      /*printf("targetRawSteeringValue value: %f", targetRawSteeringValue);
-      printf("target steering value: %f", targetSteeringValue);
-      printf("steeringMax value: %f", steeringMax);
-      printf("idleSteeringValue value: %f", idleSteeringValue);*/
+      printf("targetRawSteeringValue value: %f\n", targetRawSteeringValue);
+      printf("target steering value: %f\n", targetSteeringValue);
+      printf("steeringMax value: %f\n", steeringMax);
+      printf("idleSteeringValue value: %f\n", idleSteeringValue);
 
       if (targetSteeringValue > currentSteeringValue)
       {
@@ -387,13 +384,13 @@ int main()
    janus_config_item *steeringStepItem = janus_config_get_item_drilldown(config, "gpio", "steering_step_value");
    if (steeringStepItem && steeringStepItem->value)
    {
-      steeringStepValue = atoi(steeringStepItem->value);
+      steeringStepValue = atof(steeringStepItem->value);
    }
 
    janus_config_item *throttleStepItem = janus_config_get_item_drilldown(config, "gpio", "throttle_step_value");
    if (steeringStepItem && throttleStepItem->value)
    {
-      throttleStepValue = atoi(throttleStepItem->value);
+      throttleStepValue = atof(throttleStepItem->value);
    }
 
    janus_config_item *idleSteeringItem = janus_config_get_item_drilldown(config, "gpio", "idle_steering_value");
